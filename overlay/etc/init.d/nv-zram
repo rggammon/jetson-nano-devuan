@@ -1,0 +1,22 @@
+#!/sbin/openrc-run
+# Port of NVIDIA's nvzramconfig.service: compressed swap in RAM.
+
+description="NVIDIA zram swap setup"
+
+depend() {
+	after nv-l4t localmount mountall mountall.sh kmod
+}
+
+start() {
+	ebegin "Configuring zram swap"
+	/etc/systemd/nvzramconfig.sh
+	eend $?
+}
+
+stop() {
+	ebegin "Disabling zram swap"
+	for dev in /dev/zram*; do
+		[ -b "$dev" ] && swapoff "$dev" 2>/dev/null
+	done
+	eend 0
+}

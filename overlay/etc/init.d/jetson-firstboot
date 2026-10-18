@@ -1,0 +1,36 @@
+#!/sbin/openrc-run
+# One-time setup on the first boot of a freshly flashed card.
+
+description="First boot: grow root filesystem, generate SSH host keys and machine-id"
+
+marker="/var/lib/jetson-firstboot.done"
+
+depend() {
+	after localmount mountall mountall.sh
+	before ssh sshd
+}
+
+start() {
+	[ -e "$marker" ] && return 0
+
+	ebegin "Growing root partition to fill the SD card"
+	# growpart exits 1 for NOCHANGE (already full size).
+	growpart /dev/mmcblk0 1; rc=$?
+	if [ $rc -eq 0 ]; then
+		resize2fs /dev/mmcblk0p1
+		rc=$?
+	elif [ $rc -eq 1 ]; then
+		rc=0
+	fi
+	eend $rc
+
+	ebegin "Generating SSH host keys"
+	ssh-keygen -A
+	eend $?
+
+	if [ ! -s /etc/machine-id ]; then
+		tr -d '-' < /proc/sys/kernel/random/uuid > /etc/machine-id
+	fi
+
+	touch "$marker"
+}

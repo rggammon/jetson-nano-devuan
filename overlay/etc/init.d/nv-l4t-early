@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+# Port of NVIDIA's nvfb-early.service + nvfb.service (nvidia-l4t-init/configs).
+
+description="NVIDIA L4T early setup (nvpmodel config link, first-boot fixups)"
+
+depend() {
+	after localmount mountall mountall.sh kmod eudev udev
+	before nv-l4t
+}
+
+start() {
+	ebegin "Running NVIDIA L4T early setup"
+	/etc/systemd/nvfb-early.sh && /etc/systemd/nvfb.sh
+	eend $?
+}

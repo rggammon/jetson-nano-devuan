@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""End-to-end GPU check without nvcc.
+
+Loads libcuda, prints device info, then JIT-compiles a tiny PTX kernel with the
+driver, runs it on the GPU and verifies the result.
+"""
+import ctypes
+import sys
+
+PTX = b"""
+.version 6.5
+.target sm_53
+.address_size 64
+
+.visible .entry triple(.param .u64 out, .param .u32 n)
+{
+    .reg .pred  %p<2>;
+    .reg .b32   %r<7>;
+    .reg .b64   %rd<5>;
+
+    ld.param.u64    %rd1, [out];
+    ld.param.u32    %r2, [n];
+    mov.u32         %r3, %ctaid.x;
+    mov.u32         %r4, %ntid.x;
+    mov.u32         %r5, %tid.x;
+    mad.lo.s32      %r1, %r3, %r4, %r5;
+    setp.ge.u32     %p1, %r1, %r2;
+    @%p1 bra        DONE;
+    cvta.to.global.u64 %rd2, %rd1;
+    mul.wide.u32    %rd3, %r1, 4;
+    add.s64         %rd4, %rd2, %rd3;
+    mul.lo.s32      %r6, %r1, 3;
+    st.global.u32   [%rd4], %r6;
+DONE:
+    ret;
+}
+"""
+
+ATTR_CC_MAJOR, ATTR_CC_MINOR, ATTR_SM_COUNT = 75, 76, 16
+
+
+def main():
+    try:
+        cuda = ctypes.CDLL("libcuda.so.1")
+    except OSError as e:
+        print(f"FAIL: cannot load libcuda.so.1: {e}")
+        return 1
+
+    def ok(result, what):
+        if result != 0:
+            raise RuntimeError(f"{what} failed with CUresult {result}")
+
+    ok(cuda.cuInit(0), "cuInit")
+    ver = ctypes.c_int()
+    ok(cuda.cuDriverGetVersion(ctypes.byref(ver)), "cuDriverGetVersion")
+    count = ctypes.c_int()
+    ok(cuda.cuDeviceGetCount(ctypes.byref(count)), "cuDeviceGetCount")
+    print(f"CUDA driver API {ver.value // 1000}.{ver.value % 1000 // 10}, {count.value} device(s)")
+    if count.value == 0:
+        print("FAIL: no CUDA devices")
+        return 1
+
+    dev = ctypes.c_int()
+    ok(cuda.cuDeviceGet(ctypes.byref(dev), 0), "cuDeviceGet")
+    name = ctypes.create_string_buffer(128)
+    ok(cuda.cuDeviceGetName(name, len(name), dev), "cuDeviceGetName")
+    attrs = {}
+    for key, attr in (("major", ATTR_CC_MAJOR), ("minor", ATTR_CC_MINOR), ("sms", ATTR_SM_COUNT)):
+        v = ctypes.c_int()
+        ok(cuda.cuDeviceGetAttribute(ctypes.byref(v), attr, dev), "cuDeviceGetAttribute")
+        attrs[key] = v.value
+    mem = ctypes.c_size_t()
+    ok(cuda.cuDeviceTotalMem_v2(ctypes.byref(mem), dev), "cuDeviceTotalMem")
+    print(f"Device 0: {name.value.decode()} (sm_{attrs['major']}{attrs['minor']}, "
+          f"{attrs['sms']} SMs, {mem.value // 2**20} MiB)")
+
+    ctx = ctypes.c_void_p()
+    ok(cuda.cuCtxCreate_v2(ctypes.byref(ctx), 0, dev), "cuCtxCreate")
+    try:
+        mod = ctypes.c_void_p()
+        ok(cuda.cuModuleLoadData(ctypes.byref(mod), ctypes.c_char_p(PTX)), "cuModuleLoadData (PTX JIT)")
+        fn = ctypes.c_void_p()
+        ok(cuda.cuModuleGetFunction(ctypes.byref(fn), mod, b"triple"), "cuModuleGetFunction")
+
+        n = 1 << 16
+        dptr = ctypes.c_uint64()
+        ok(cuda.cuMemAlloc_v2(ctypes.byref(dptr), ctypes.c_size_t(n * 4)), "cuMemAlloc")
+        arg_n = ctypes.c_uint32(n)
+        params = (ctypes.c_void_p * 2)(ctypes.addressof(dptr), ctypes.addressof(arg_n))
+        block = 256
+        ok(cuda.cuLaunchKernel(fn, (n + block - 1) // block, 1, 1, block, 1, 1,
+                               0, None, params, None), "cuLaunchKernel")
+        ok(cuda.cuCtxSynchronize(), "cuCtxSynchronize")
+        host = (ctypes.c_uint32 * n)()
+        ok(cuda.cuMemcpyDtoH_v2(host, dptr, ctypes.c_size_t(n * 4)), "cuMemcpyDtoH")
+        cuda.cuMemFree_v2(dptr)
+        bad = sum(1 for i in range(n) if host[i] != 3 * i)
+        if bad:
+            print(f"FAIL: {bad} of {n} results wrong")
+            return 1
+        print(f"PASS: GPU kernel computed {n} values correctly")
+        return 0
+    finally:
+        cuda.cuCtxDestroy_v2(ctx)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except RuntimeError as e:
+        print(f"FAIL: {e}")
+        sys.exit(1)

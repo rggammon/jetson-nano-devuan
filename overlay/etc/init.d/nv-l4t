@@ -1,0 +1,38 @@
+#!/sbin/openrc-run
+# Port of NVIDIA's nv.service, nvpmodel.service and nvphs.service.
+
+description="NVIDIA L4T init (CPU governors, power model, power hinting daemon)"
+
+pidfile="/run/nvphsd.pid"
+
+depend() {
+	after nv-l4t-early localmount mountall mountall.sh kmod eudev udev
+}
+
+start() {
+	ebegin "Running NVIDIA L4T init (nv.sh)"
+	/etc/systemd/nv.sh
+	eend $?
+
+	if [ -x /usr/sbin/nvpmodel ] && [ -e /etc/nvpmodel.conf ]; then
+		ebegin "Applying nvpmodel power mode"
+		/usr/sbin/nvpmodel -f /etc/nvpmodel.conf
+		eend $?
+	fi
+
+	if [ -x /usr/sbin/nvphsd ]; then
+		ebegin "Starting nvphsd"
+		start-stop-daemon --start --background --make-pidfile \
+			--pidfile "$pidfile" --exec /usr/sbin/nvphsd
+		eend $?
+	fi
+}
+
+stop() {
+	if [ -e "$pidfile" ]; then
+		ebegin "Stopping nvphsd"
+		start-stop-daemon --stop --pidfile "$pidfile" --retry 5
+		rm -f "$pidfile"
+		eend 0
+	fi
+}
