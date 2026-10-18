@@ -271,7 +271,7 @@ in_chroot "
 # Services. Package postinsts already register most LSB scripts with OpenRC
 # (via update-rc.d); only add the ones that are not in any runlevel yet.
 in_chroot "
-    for s in nv-l4t-early nv-l4t nv-zram jetson-firstboot; do rc-update add \$s default >/dev/null; done
+    for s in nv-l4t-early nv-l4t nv-phs nv-zram jetson-firstboot; do rc-update add \$s default >/dev/null; done
     for s in ssh chrony cron rsyslog networking fake-hwclock dbus avahi-daemon; do
         if [ ! -e /etc/init.d/\$s ]; then echo \"warning: no /etc/init.d/\$s\"; continue; fi
         rc-update show -v | grep -qE \"^ *\$s \\| *[a-z]\" || rc-update add \$s default >/dev/null

@@ -35,7 +35,7 @@ for p in /boot/Image /boot/initrd /boot/extlinux/extlinux.conf \
          /usr/lib/modules/4.9.337-tegra/modules.dep \
          /usr/lib/aarch64-linux-gnu/tegra/libcuda.so.1.1 \
          /usr/lib/aarch64-linux-gnu/libffi.so.6 \
-         /etc/init.d/nv-l4t /etc/init.d/nv-l4t-early /etc/init.d/jetson-firstboot \
+         /etc/init.d/nv-l4t /etc/init.d/nv-l4t-early /etc/init.d/nv-phs /etc/init.d/jetson-firstboot \
          /etc/systemd/nv.sh /usr/sbin/sshd /usr/local/bin/cuda-check; do
     exists "$p" && ok "$p" || bad "missing $p"
 done

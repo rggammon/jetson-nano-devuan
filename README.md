@@ -7,7 +7,7 @@ Reproducible SD-card images for the **NVIDIA Jetson Nano Developer Kit (P3448/P3
 
 Images are built by GitHub Actions on native arm64 runners (no qemu) and attached to [Releases](../../releases) for `v*` tags.
 
-> **Status: experimental.** CI builds and checks the image offline. Booting on real hardware has not been verified yet, so expect to need the serial console the first time.
+> **Status: experimental, boots on hardware.** Verified on a Jetson Nano 4 GB devkit: boots to OpenRC, DHCP + SSH + mDNS work, the root filesystem grows on first boot, all NVIDIA services start, and `cuda-check` passes (a PTX kernel JIT-compiled and run on the Tegra X1 GPU).
 
 ## Why Devuan
 
@@ -18,9 +18,12 @@ NVIDIA's L4T packages don't depend on systemd. Their services just wrap shell sc
 | NVIDIA systemd unit | OpenRC service |
 |---|---|
 | `nvfb-early.service`, `nvfb.service` | `nv-l4t-early` |
-| `nv.service`, `nvpmodel.service`, `nvphs.service` | `nv-l4t` |
+| `nv.service`, `nvpmodel.service` | `nv-l4t` |
+| `nvphs.service` (incl. `ExecStartPre=nvphsd_setup.sh`) | `nv-phs` (supervised daemon) |
 | `nvzramconfig.service` | `nv-zram` |
 | (new) | `jetson-firstboot`: grows the root filesystem, generates SSH host keys and machine-id |
+
+Not ported: `nvwifibt` (Broadcom Wi-Fi/BT on some modules; the devkit has none), `nvargus-daemon` (CSI cameras; not in the default package set), `nv-oem-config*`, `nvgetty`/`nvs-service` (USB device mode).
 
 ## Requirements
 

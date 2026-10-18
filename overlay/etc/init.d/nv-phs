@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# Port of NVIDIA's nvphs.service (power hinting daemon).
+
+description="NVIDIA power hinting service daemon"
+
+command="/usr/sbin/nvphsd"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+	after nv-l4t
+}
+
+start_pre() {
+	# Creates /run/nvphs and /var/lib/nvphs and sets thermal-zone permissions.
+	/usr/sbin/nvphsd_setup.sh
+}
