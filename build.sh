@@ -201,7 +201,7 @@ esac
 
 in_chroot "apt-get update"
 # sysv-rc is Priority: required in Devuan, so OpenRC replaces (and purges) it after bootstrap.
-in_chroot "apt-get install -y openrc sysv-rc_"
+in_chroot "apt-get install -y --purge openrc sysv-rc-"
 # nvidia-l4t-core must be configured before the rest (same as nv-apply-debs.sh).
 in_chroot "apt-get install -y /tmp/compat/*.deb nvidia-l4t-core=$L4T_VERSION"
 in_chroot "apt-get install -y ${L4T_PINNED[*]} ${CUDA_PACKAGES[*]:-}"
