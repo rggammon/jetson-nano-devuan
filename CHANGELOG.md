@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-- Drop Mesa and LLVM (~155 MB installed) from the image. Debian's GL dispatcher (libglvnd) hard-depends on Mesa's EGL/GLX vendor libraries, but on Tegra it always dispatches to NVIDIA's `libEGL_nvidia`/`libGLX_nvidia`. Empty `libegl-mesa0`/`libglx-mesa0` placeholder packages satisfy the dependency, and the build fails if Mesa or LLVM reappear in the base image.
-  - To install real Mesa later (e.g. for an X server with glamor), run `sudo apt install --allow-downgrades libegl-mesa0=<version> libglx-mesa0=<version>`, using the versions shown by `apt policy libegl-mesa0`.
+- Drop Mesa and LLVM (~155 MB installed) from the image. Nothing on Tegra uses them, but two dependency chains pulled them in:
+  - Debian's GL dispatcher (libglvnd) hard-depends on Mesa's EGL/GLX vendor libraries, but on Tegra it always dispatches to NVIDIA's `libEGL_nvidia`/`libGLX_nvidia`. Empty `libegl-mesa0`/`libglx-mesa0` placeholders satisfy that dependency.
+  - `nvidia-l4t-multimedia` declares `libgstreamer-plugins-bad1.0-0`, which chains through `libgstreamer-gl` and `libgbm1` to Mesa. NVIDIA's binaries only link `libgstreamer-1.0` and `libgstvideo-1.0` (from plugins-base), so it's a placeholder too.
+  - The build fails if Mesa, LLVM or GBM reappear in the base image.
+  - To restore a real package later (e.g. for an X server or GStreamer GL plugins), run `sudo apt install --allow-downgrades <pkg>=<version>`, using the version shown by `apt policy <pkg>`.
 
 ## v1.0.0 — 2026-10-17
 

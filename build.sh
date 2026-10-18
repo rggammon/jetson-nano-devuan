@@ -108,6 +108,10 @@ make_dummy libegl1-mesa all libegl1 "transitional dummy package for NVIDIA L4T c
 # never used. The 99: epoch keeps apt from "upgrading" back to real Mesa.
 make_dummy libegl-mesa0 arm64 "" "placeholder: EGL is provided by NVIDIA's libEGL_nvidia (nvidia-l4t-3d-core)"
 make_dummy libglx-mesa0 arm64 "" "placeholder: GLX is provided by NVIDIA's libGLX_nvidia (nvidia-l4t-3d-core)"
+# nvidia-l4t-multimedia declares this dependency but links only libgstreamer-1.0 and
+# libgstvideo-1.0 (from plugins-base). The real package chains to
+# libgstreamer-gl -> libgbm1 -> mesa-libgallium -> libllvm19.
+make_dummy libgstreamer-plugins-bad1.0-0 arm64 "" "placeholder: not linked by NVIDIA L4T multimedia; avoids pulling in Mesa via gstreamer-gl"
 
 # --------------------------------------------------------------------------
 log "Bootstrapping Devuan $SUITE into $ROOTFS"
@@ -213,7 +217,7 @@ in_chroot "apt-get install -y --purge openrc sysv-rc-"
 # nvidia-l4t-core must be configured before the rest (same as nv-apply-debs.sh).
 in_chroot "apt-get install -y /tmp/compat/*.deb nvidia-l4t-core=$L4T_VERSION"
 in_chroot "apt-get install -y ${L4T_PINNED[*]} ${CUDA_PACKAGES[*]:-}"
-mesa=$(in_chroot "dpkg-query -W -f='\${db:Status-Abbrev} \${Package}\n' 'mesa-*' 'libllvm*' 'libgl1-mesa-dri' 2>/dev/null | awk '\$1 ~ /^ii/ {print \$2}'" || true)
+mesa=$(in_chroot "dpkg-query -W -f='\${db:Status-Abbrev} \${Package}\n'" | awk '$1 ~ /^ii/ && $2 ~ /^(mesa-|libllvm|libgl1-mesa-dri$|libgbm1$)/ {print $2}')
 [ -z "$mesa" ] || die "Mesa/LLVM got pulled into the base image (unused on Tegra): $mesa"
 if [ -n "$EXTRA_PACKAGES" ]; then
     in_chroot "apt-get install -y $EXTRA_PACKAGES"
