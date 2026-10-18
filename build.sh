@@ -102,9 +102,9 @@ EOF
 make_dummy libegl1-mesa libegl1
 
 # --------------------------------------------------------------------------
-log "Bootstrapping Devuan $SUITE (OpenRC) into $ROOTFS"
+log "Bootstrapping Devuan $SUITE into $ROOTFS"
 BASE_PACKAGES=(
-    devuan-keyring openrc sysvinit-core eudev kmod procps
+    devuan-keyring sysvinit-core eudev kmod procps
     bash-completion ca-certificates curl less nano sudo locales tzdata
     openssh-server ifupdown dhcpcd-base iproute2 iputils-ping netbase avahi-daemon dbus
     chrony fake-hwclock cron rsyslog logrotate
@@ -200,6 +200,8 @@ case "$CUDA" in
 esac
 
 in_chroot "apt-get update"
+# sysv-rc is Priority: required in Devuan, so OpenRC replaces it after bootstrap.
+in_chroot "apt-get install -y openrc sysv-rc-"
 # nvidia-l4t-core must be configured before the rest (same as nv-apply-debs.sh).
 in_chroot "apt-get install -y /tmp/compat/*.deb nvidia-l4t-core=$L4T_VERSION"
 in_chroot "apt-get install -y ${L4T_PINNED[*]} ${CUDA_PACKAGES[*]:-}"
