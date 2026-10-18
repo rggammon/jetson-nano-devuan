@@ -83,23 +83,31 @@ fetch_pinned http://archive.debian.org/debian/pool/main/libf/libffi/libffi6_3.2.
 fetch_pinned http://deb.debian.org/debian/pool/main/p/pcre3/libpcre3_8.39-15_arm64.deb \
     ffff38112e92b032688c0efdc19673686feb2aff8b85f65f54d9f2f6b55992d9
 
-# Pure name-only dependencies get empty transitional packages.
+# Empty packages that satisfy dependencies by name.
+#   make_dummy NAME ARCH DEPENDS DESCRIPTION
 make_dummy() {
-    local name=$1 depends=$2 d="$WORK/dummy/$1"
+    local name=$1 arch=$2 depends=$3 desc=$4 d="$WORK/dummy/$1"
     mkdir -p "$d/DEBIAN"
-    cat > "$d/DEBIAN/control" <<EOF
-Package: $name
-Version: 99:0+jetson1
-Architecture: all
-Maintainer: jetson-nano-devuan <noreply@example.invalid>
-Depends: $depends
-Section: oldlibs
-Priority: optional
-Description: transitional dummy package for NVIDIA L4T compatibility
-EOF
-    dpkg-deb --root-owner-group -b "$d" "$COMPAT/${name}_dummy_all.deb" >/dev/null
+    {
+        echo "Package: $name"
+        echo "Version: 99:0+jetson1"
+        echo "Architecture: $arch"
+        echo "Maintainer: jetson-nano-devuan <noreply@example.invalid>"
+        [ -n "$depends" ] && echo "Depends: $depends"
+        echo "Section: oldlibs"
+        echo "Priority: optional"
+        echo "Description: $desc"
+    } > "$d/DEBIAN/control"
+    dpkg-deb --root-owner-group -b "$d" "$COMPAT/${name}_dummy_${arch}.deb" >/dev/null
 }
-make_dummy libegl1-mesa libegl1
+# Old Ubuntu name required by nvidia-l4t-camera/gstreamer (optional extras).
+make_dummy libegl1-mesa all libegl1 "transitional dummy package for NVIDIA L4T compatibility"
+# Debian's libglvnd hard-depends on Mesa's EGL/GLX vendor libraries, which drag
+# in mesa-libgallium + libllvm (~155 MB). On Tegra, glvnd always dispatches to
+# NVIDIA's libEGL_nvidia/libGLX_nvidia (from nvidia-l4t-3d-core), so Mesa is
+# never used. The 99: epoch keeps apt from "upgrading" back to real Mesa.
+make_dummy libegl-mesa0 arm64 "" "placeholder: EGL is provided by NVIDIA's libEGL_nvidia (nvidia-l4t-3d-core)"
+make_dummy libglx-mesa0 arm64 "" "placeholder: GLX is provided by NVIDIA's libGLX_nvidia (nvidia-l4t-3d-core)"
 
 # --------------------------------------------------------------------------
 log "Bootstrapping Devuan $SUITE into $ROOTFS"
@@ -205,6 +213,8 @@ in_chroot "apt-get install -y --purge openrc sysv-rc-"
 # nvidia-l4t-core must be configured before the rest (same as nv-apply-debs.sh).
 in_chroot "apt-get install -y /tmp/compat/*.deb nvidia-l4t-core=$L4T_VERSION"
 in_chroot "apt-get install -y ${L4T_PINNED[*]} ${CUDA_PACKAGES[*]:-}"
+mesa=$(in_chroot "dpkg-query -W -f='\${db:Status-Abbrev} \${Package}\n' 'mesa-*' 'libllvm*' 'libgl1-mesa-dri' 2>/dev/null | awk '\$1 ~ /^ii/ {print \$2}'" || true)
+[ -z "$mesa" ] || die "Mesa/LLVM got pulled into the base image (unused on Tegra): $mesa"
 if [ -n "$EXTRA_PACKAGES" ]; then
     in_chroot "apt-get install -y $EXTRA_PACKAGES"
 fi
