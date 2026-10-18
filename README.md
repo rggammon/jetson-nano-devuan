@@ -59,10 +59,10 @@ cuda-check                    # JIT-compiles and runs a PTX kernel on the GPU vi
 | Layer | Contents |
 |---|---|
 | Boot | Single GPT partition `APP` (ext4). NVIDIA U-Boot in QSPI reads `/boot/extlinux/extlinux.conf` and boots `/boot/Image` + NVIDIA's `/boot/initrd`. The kernel DTB comes from QSPI, as with stock images. |
-| Kernel/BSP | `nvidia-l4t-{core,init,configs,tools,kernel,kernel-dtbs,initrd,firmware,xusb-firmware,3d-core,wayland,cuda,libvulkan,multimedia,multimedia-utils,jetson-io}` 32.7.6 |
+| Kernel/BSP | `nvidia-l4t-{core,init,configs,tools,kernel,kernel-dtbs,initrd,firmware,xusb-firmware,3d-core,wayland,cuda,libvulkan,jetson-io}` 32.7.6. Hardware video is opt-in (see [Hardware video](#hardware-video)). |
 | CUDA | `cuda-libraries-10-2` (runtime) by default. The workflow input can switch to `cuda-toolkit-10-2` or none. cuDNN 8.2 and TensorRT 8.2 can be installed with `apt` from NVIDIA's repo, which is preconfigured. |
 | Userland | Devuan Excalibur minbase + OpenRC, eudev, OpenSSH, ifupdown + dhcpcd (`eth0` DHCP), chrony, fake-hwclock, cron, rsyslog, sudo, Python 3.13 |
-| Compat | `libffi6` (Debian 10) and `libpcre3` (Debian 12), pinned by SHA256, cover sonames NVIDIA's 18.04-era binaries need that Trixie no longer ships. Dummy packages: `libegl1-mesa` (an old Ubuntu name needed only by the optional camera/GStreamer packages), plus `libegl-mesa0`, `libglx-mesa0` and `libgstreamer-plugins-bad1.0-0`. The last three cut dependency chains that would pull in Mesa + LLVM (~155 MB) that Tegra never uses: NVIDIA's own vendor libraries handle EGL/GLX, and NVIDIA's multimedia libraries only link `libgstreamer`/`libgstvideo`. See [CHANGELOG](CHANGELOG.md). |
+| Compat | `libffi6` (Debian 10) and `libpcre3` (Debian 12), pinned by SHA256, cover sonames NVIDIA's 18.04-era binaries need that Trixie no longer ships. Dummy packages: `libegl1-mesa` (an old Ubuntu name needed by NVIDIA's optional camera/GStreamer packages), plus `libegl-mesa0` and `libglx-mesa0`, which stop Debian's GL dispatcher (libglvnd) from pulling in Mesa + LLVM (~155 MB) that Tegra never uses. NVIDIA's own vendor libraries handle EGL/GLX. See [CHANGELOG](CHANGELOG.md). |
 | X11 | No X server, display manager, or desktop. NVIDIA's packages require only the X client libraries (`libx11-6`, `libxext6`) plus `nvidia-l4t-x11`, which on this board just ships two `xorg.conf` files. |
 
 ## Build
@@ -87,6 +87,31 @@ sudo CUDA=runtime ./build.sh            # output in ./out
 Variables: `SUITE`, `MIRROR`, `CUDA` (`none|runtime|toolkit`), `EXTRA_PACKAGES`, `IMG_HOSTNAME`, `IMG_USER`, `IMG_PASSWORD`, `IMAGE_VERSION`, `COMPRESS=0`.
 
 `scripts/verify-image.sh <img>` checks a built image offline: the GPT layout, ext4 features readable by kernel 4.9 and U-Boot, boot-critical files, and that no SSH host keys are baked in.
+
+## Hardware video
+
+NVIDIA's hardware video encoder/decoder (NVENC/NVDEC) and GStreamer elements aren't in the default image, because they pull in GStreamer and Mesa. Install them on the device:
+
+```bash
+sudo apt install nvidia-l4t-multimedia nvidia-l4t-gstreamer \
+    gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+```
+
+or bake them in via the workflow's `extra_packages` input. NVIDIA's GStreamer 1.14-era plugins load on GStreamer 1.26 (`nvv4l2decoder`, `nvv4l2h264enc`/`h265enc`, `nvvidconv`, `nvdrmvideosink`, …), except `nvcompositor`, which needs a library that no longer exists. Display output without X/Wayland:
+
+```bash
+gst-launch-1.0 filesrc location=clip.mp4 ! qtdemux ! h264parse ! nvv4l2decoder ! \
+    nvvidconv ! video/x-raw,format=I420 ! nvdrmvideosink
+```
+
+GPU rendering without X/Wayland also works through EGLDevice/EGLOutput (`drm-nvdc`): NVIDIA's `graphics_demos` `egldevice` builds run at full refresh rate. `nveglglessink`/`nv3dsink` need X11 or Wayland. NVIDIA's X driver doesn't support Trixie's X server (driver ABI 25.2), and NVIDIA's Weston needs `libjpeg-turbo8`, which Debian doesn't ship.
+
+**OpenGL under a Mesa-based X/Wayland session:** the `libegl-mesa0`/`libglx-mesa0` placeholders mean Mesa's EGL/GLX vendor libraries aren't installed. An X server or compositor using Mesa (e.g. `modesetting`) still installs, but GLX/EGL clients inside it get no vendor library, instead of Mesa's software (llvmpipe) rendering. If you need that, replace the placeholders:
+
+```bash
+v=$(apt-cache madison libegl-mesa0 | awk '{print $3; exit}')
+sudo apt install --allow-downgrades libegl-mesa0=$v libglx-mesa0=$v
+```
 
 ## Known limits
 

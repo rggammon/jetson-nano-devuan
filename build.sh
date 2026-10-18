@@ -108,10 +108,6 @@ make_dummy libegl1-mesa all libegl1 "transitional dummy package for NVIDIA L4T c
 # never used. The 99: epoch keeps apt from "upgrading" back to real Mesa.
 make_dummy libegl-mesa0 arm64 "" "placeholder: EGL is provided by NVIDIA's libEGL_nvidia (nvidia-l4t-3d-core)"
 make_dummy libglx-mesa0 arm64 "" "placeholder: GLX is provided by NVIDIA's libGLX_nvidia (nvidia-l4t-3d-core)"
-# nvidia-l4t-multimedia declares this dependency but links only libgstreamer-1.0 and
-# libgstvideo-1.0 (from plugins-base). The real package chains to
-# libgstreamer-gl -> libgbm1 -> mesa-libgallium -> libllvm19.
-make_dummy libgstreamer-plugins-bad1.0-0 arm64 "" "placeholder: not linked by NVIDIA L4T multimedia; avoids pulling in Mesa via gstreamer-gl"
 
 # --------------------------------------------------------------------------
 log "Bootstrapping Devuan $SUITE into $ROOTFS"
@@ -189,12 +185,15 @@ install -D -m 644 "$HERE/overlay/boot/extlinux/extlinux.conf" "$ROOTFS/boot/extl
 mkdir -p "$ROOTFS/tmp/compat"
 cp "$COMPAT"/*.deb "$ROOTFS/tmp/compat/"
 
+# Hardware video codecs (nvidia-l4t-multimedia, -gstreamer, -camera) are not in the
+# default set: they pull GStreamer and, through gstreamer-gl, Mesa + LLVM. Add them
+# with EXTRA_PACKAGES; libpcre3 and libegl1-mesa above keep them installable.
 L4T_PACKAGES=(
     nvidia-l4t-core nvidia-l4t-init nvidia-l4t-configs nvidia-l4t-tools
     nvidia-l4t-kernel nvidia-l4t-kernel-dtbs nvidia-l4t-initrd
     nvidia-l4t-firmware nvidia-l4t-xusb-firmware
     nvidia-l4t-3d-core nvidia-l4t-wayland nvidia-l4t-cuda nvidia-l4t-libvulkan
-    nvidia-l4t-multimedia nvidia-l4t-multimedia-utils nvidia-l4t-jetson-io
+    nvidia-l4t-jetson-io
 )
 L4T_PINNED=()
 for p in "${L4T_PACKAGES[@]}"; do
