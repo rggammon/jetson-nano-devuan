@@ -45,6 +45,7 @@ for l in /bin /sbin /lib; do
 done
 
 if exists /etc/ssh/ssh_host_ed25519_key; then bad "SSH host keys baked into image"; else ok "no SSH host keys in image"; fi
+if exists /etc/nv/nvfirstboot; then bad "/etc/nv/nvfirstboot still set (nvfb.sh would loop on dpkg-reconfigure)"; else ok "NVIDIA first-boot marker cleared"; fi
 
 echo "  extlinux.conf:"
 debugfs -R "cat /boot/extlinux/extlinux.conf" "$FS" 2>/dev/null | grep -vE '^\s*(#|$)' | sed 's/^/    /'

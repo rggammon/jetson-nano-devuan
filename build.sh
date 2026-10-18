@@ -200,8 +200,8 @@ case "$CUDA" in
 esac
 
 in_chroot "apt-get update"
-# sysv-rc is Priority: required in Devuan, so OpenRC replaces it after bootstrap.
-in_chroot "apt-get install -y openrc sysv-rc-"
+# sysv-rc is Priority: required in Devuan, so OpenRC replaces (and purges) it after bootstrap.
+in_chroot "apt-get install -y openrc sysv-rc_"
 # nvidia-l4t-core must be configured before the rest (same as nv-apply-debs.sh).
 in_chroot "apt-get install -y /tmp/compat/*.deb nvidia-l4t-core=$L4T_VERSION"
 in_chroot "apt-get install -y ${L4T_PINNED[*]} ${CUDA_PACKAGES[*]:-}"
@@ -209,6 +209,10 @@ if [ -n "$EXTRA_PACKAGES" ]; then
     in_chroot "apt-get install -y $EXTRA_PACKAGES"
 fi
 rm -rf "$ROOTFS/tmp/compat"
+
+problems=$(in_chroot "dpkg --audit")
+[ -z "$problems" ] || die "dpkg reports unconfigured/broken packages:
+$problems"
 
 # nvidia-l4t-init's postinst rewrites these during pre-installation.
 rm -f "$ROOTFS/opt/nvidia/l4t-packages/.nv-l4t-disable-boot-fw-update-in-preinstall"
@@ -219,6 +223,8 @@ tar -C "$HERE/overlay" --owner=0 --group=0 -cf - . | tar -C "$ROOTFS" --no-overw
 chmod 755 "$ROOTFS"/etc/init.d/nv-* "$ROOTFS"/etc/init.d/jetson-* "$ROOTFS"/usr/local/bin/*
 
 # Same as the first-boot block of nvfb-early.sh, done now so CUDA/EGL work immediately.
+# Clearing /etc/nv/nvfirstboot also skips nvfb.sh's unbounded
+# "dpkg-reconfigure openssh-server" retry loop; host keys come from jetson-firstboot.
 in_chroot "
     echo /usr/lib/aarch64-linux-gnu/tegra > /etc/ld.so.conf.d/nvidia-tegra.conf
     echo /usr/lib/aarch64-linux-gnu/tegra-egl > /usr/lib/aarch64-linux-gnu/tegra-egl/ld.so.conf
@@ -226,6 +232,8 @@ in_chroot "
     update-alternatives --install /etc/ld.so.conf.d/aarch64-linux-gnu_EGL.conf aarch64-linux-gnu_egl_conf /usr/lib/aarch64-linux-gnu/tegra-egl/ld.so.conf 1000
     update-alternatives --install /etc/ld.so.conf.d/aarch64-linux-gnu_GL.conf aarch64-linux-gnu_gl_conf /usr/lib/aarch64-linux-gnu/tegra/ld.so.conf 1000
     ldconfig
+    groupadd -rf debug
+    rm -f /etc/nv/nvfirstboot
 "
 
 echo "$IMG_HOSTNAME" > "$ROOTFS/etc/hostname"
