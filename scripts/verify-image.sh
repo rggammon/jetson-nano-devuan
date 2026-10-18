@@ -20,7 +20,8 @@ grep -qi "Attribute flags: 0000000000000004" <<<"$info" && ok "partition 1 has l
 
 if e2fsck -fn "$FS" >/dev/null 2>&1; then ok "e2fsck clean"; else bad "e2fsck reported errors"; e2fsck -fn "$FS" || true; fi
 
-features=$(dumpe2fs -h "$FS" 2>/dev/null | sed -n 's/^Filesystem features: *//p')
+features=$(debugfs -R stats "$FS" 2>/dev/null | sed -n 's/^Filesystem features: *//p')
+[ -n "$features" ] || bad "could not read ext4 features"
 echo "  features: $features"
 newfeat=0
 for f in orphan_file metadata_csum_seed inline_data encrypt casefold large_dir verity; do
